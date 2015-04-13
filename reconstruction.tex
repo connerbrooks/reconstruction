@@ -1,0 +1,65 @@
+\documentclass[10pt,twocolumn]{article} 
+\usepackage{simpleConference}
+\usepackage{times}
+\usepackage{graphicx}
+\usepackage{amssymb}
+\usepackage{url,hyperref}
+
+\begin{document}
+
+\title{Advanced Real-time Reconstruction Methods}
+
+\author{Conner Brooks\\
+\\
+CAP 4453\\
+\today \\
+\\
+University of Central Florida\\
+Orlando, FL, USA\\
+\\
+connerbrooks@gmail.com\\
+}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+  The paper by Whelan et al. presents a new SLAM--
+  Simultaneous Localization and Mapping--system capable of producing high quality
+  reconstructions of an 3 dimensional environment with a low cost RGB-D sensor
+  e.g. the Microsoft Kinect \ref{1}. This system is made possible by three
+  key techniques.
+  First, General-Purpose computing on Graphics Processing Units (GPGPU) and a 3D 
+  cyclical buffer trick to extend the scanning volume to and unbounded spatial
+  region. Second, this system also overcomes pose estimation limitations by combining
+  dense geometric and photometric camera pose constraints. Third, the map of the 
+  environment is updated according to place recognition and loop closure constraints.
+  In this paper the first two techniques will be covered.
+\end{abstract}
+
+\section{Introduction}
+3D reconstruction of environments is an important problem for 
+robotics, virtual reality, and augmented reality. Understanding the geometry
+allows a robot to avoid obticals and navigate, and with augmented reality
+allows for interesting interactions with the environment. The advent of
+commodity depth sensors has resulted in a large amount of reasearch 
+concerning 3D understanding of environments. The work by Whelan et al. is the 
+culmination of much of that work and represents one of the most advanced 
+3D scanning systems. To understand the work presented in this paper, one must
+first understand the work in the seminal paper by Newcombe et al. 
+
+% TODO finish general intro
+
+\subsection{Understanding Depth Sensors}
+
+\section{Kinect Fusion Basics}
+
+\section{Extensions to Kinect Fusion}
+\subsection{Cyclical Buffer Trick}
+\subsection{Camera Pose Estimation}
+
+
+
+\bibliographystyle{abbrv}
+\bibliography{refs}
+\end{document}
