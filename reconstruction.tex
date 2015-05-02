@@ -5,6 +5,7 @@
 \usepackage{amssymb}
 \usepackage{url,hyperref}
 \usepackage{mathtools}
+\graphicspath{{./figures/}}
 
 \begin{document}
 
@@ -25,17 +26,15 @@ connerbrooks@gmail.com\\
 \thispagestyle{empty}
 
 \begin{abstract}
-  The paper by Whelan et al. presents a new SLAM--
-  Simultaneous Localization and Mapping--system capable of producing high quality
-  reconstructions of an 3 dimensional environment with a low cost RGB-D sensor
-  e.g. the Microsoft Kinect \ref{1}. This system is made possible by three
-  key techniques.
-  First, General-Purpose computing on Graphics Processing Units (GPGPU) and a 3D 
+The paper Real Time Dense RGB-D SLAM with Volumentric Fusion \cite{whelan14} presents a new SLAM--Simultaneous Localization and Mapping--system capable of producing high quality
+reconstructions of an 3 dimensional environment with a low cost RGB-D sensor e.g. the Microsoft Kinect. This system is made possible by three key techniques.
+First, General-Purpose computing on Graphics Processing Units (GPGPU) and a 3D 
   cyclical buffer trick to extend the scanning volume to and unbounded spatial
   region. Second, this system also overcomes pose estimation limitations by combining
   dense geometric and photometric camera pose constraints. Third, the map of the 
   environment is updated according to place recognition and loop closure constraints.
-  In this paper the first two techniques will be covered.
+  In this paper the initial implementation of KinectFusion \cite{izadi11} \cite{newcombe11} will be described, as well as the first 2 contributions from the paper by Whelan et al.
+  
 \end{abstract}
 
 \section{Introduction}
@@ -47,13 +46,15 @@ commodity depth sensors has resulted in a large amount of reasearch
 concerning 3D understanding of environments. The work by Whelan et al. is the 
 culmination of much of that work and represents one of the most advanced 
 3D scanning systems. To understand the work presented in this paper, one must
-first understand the work in the seminal paper by Newcombe et al. 
+first understand the work in the seminal paper by Newcombe et al. \cite{newecombe11}.
 
 % TODO finish general intro
 
-\subsection{Understanding Depth Sensors}
 
 \section{Kinect Fusion Overview}
+KinectFusion 
+
+\subsection{Understanding Depth Sensors}
 
 \subsection{Surface Measurement}
 
@@ -65,7 +66,9 @@ first understand the work in the seminal paper by Newcombe et al.
 \end{itemize}
 $\mathbf{N}_k(\mathrm{u}) = v[(\mathbf{V}_k(u+1,v) - \mathbf{V}_k(u, v)) \times (\mathbf{V}_k(u,v+1) - \mathbf{V}_k(u,v))]$, where $v[\mathbf{x}] = \mathbf{x} / \| \mathbf{x} \|_{2}$
 
+\begin{figure}
 \includegraphics[width=0.8\linewidth]{depthimage}
+\end{figure}
 
 \begin{itemize}
 \item An $L = 3$ vertex and normal map pyrimid is computed.
@@ -227,5 +230,5 @@ $$
 
 
 \bibliographystyle{abbrv}
-\bibliography{refs}
+\bibliography{reconstruction}
 \end{document}

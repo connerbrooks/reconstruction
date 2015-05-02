@@ -1,21 +1,21 @@
 filename=reconstruction
 platform=$(shell uname)
 
-pdf: ps
-ifeq (${platform},Darwin)
-	pstopdf ${filename}.ps
-else
-	ps2pdf ${filename}.ps
-endif
+#pdf: ps
+#ifeq (${platform},Darwin)
+#	pstopdf ${filename}.ps
+#else
+#	ps2pdf ${filename}.ps
+#endif
 
-ps: dvi
-	dvips -P pdf -t landscape ${filename}.dvi
+#ps: dvi
+#	dvips -P pdf -t landscape ${filename}.dvi
 
-dvi:
-	latex ${filename}.tex
-	#bibtex ${filename}
-	#latex ${filename}
-	#latex ${filename}
+pdf:
+	pdflatex ${filename}.tex
+	bibtex ${filename}
+	pdflatex ${filename}.tex
+	pdflatex ${filename}.tex
 
 open:
 ifeq (${platform},Darwin)
