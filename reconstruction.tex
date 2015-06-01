@@ -31,7 +31,7 @@ connerbrooks@gmail.com\\
 
 \begin{abstract}
 The paper Real Time Dense RGB-D SLAM with Volumentric Fusion \cite{whelan14} presents a new SLAM--Simultaneous Localization and Mapping--system capable of producing high quality
-reconstructions of an 3 dimensional environment with a low cost RGB-D sensor e.g. the Microsoft Kinect. This system is made possible by three key techniques.
+reconstructions of a 3 dimensional environment with a low cost RGB-D sensor e.g. the Microsoft Kinect. This system is made possible by three key techniques.
 First, General-Purpose computing on Graphics Processing Units (GPGPU) and a 3D 
   cyclical buffer trick to extend the scanning volume to and unbounded spatial
   region. Second, this system also overcomes pose estimation limitations by combining
@@ -102,11 +102,12 @@ Since each frame is a measurment on a grid we can compute normal vectors with a 
 
  where $v[\mathbf{x}] = \mathbf{x} / \| \mathbf{x} \|_{2}$
 
-We compute an $L = 3$ vertex and normal map pyrimid is computed, the first level of the pyramid is the input depth map, we then down-sample this depth map to get the second level then once again to get the third level. 
-Depth pyrimid $D^{l \in[1\dots L]}$ bottom is original bilateral filtered depth map. 
+We compute an $L = 3$ vertex and normal map pyramid is computed, the first level of the pyramid is the input depth map, we then down-sample this depth map to get the second level then once again to get the third level. 
+Depth pyramid $D^{l \in[1\dots L]}$ bottom is original bilateral filtered depth map. 
 At each level $\textbf{V}^{l \in[1\dots L]}$ $\textbf{N}^{l \in[1\dots L]}$ with the equations from the previous slide.
 Given the camera $\rightarrow$ global co-ordinate frame transform $\mathsf{T}_{g,k}$, the global frame vertex is $\textbf{V}^{g}_{k} = \mathsf{T}_{g,k} \dot{\textbf{V}}_{k}(\mathrm{u})$
 The equivalent mapping of normal vectors $\mathbf{N}^{g}_{k}(\mathbf{u}) = \mathsf{R}_{g,k}\mathbf{N}(\mathbf{u})$
+This puts our vertex and normal maps into the global coordinate frame which is with respect to some $(0, 0, 0)$ (normally the location in which the scan was initiated).
 
 \subsection{Mapping as Surface Reconstruction}
 Each depth frame with its estimated pose, is fused into a single 3D reconstruction using a volumentric truncated signed distance function. You can think of this volume as a 3D grid that holds different values at each index. 
@@ -127,6 +128,18 @@ Two Components are stored at each location of the TSDF: the current truncated si
 \mathbf{S}_{k} \rightarrow [\mathrm{F}_{k}(\mathbf{p}), \mathrm{W}_{k}(\mathbf{p})]
 \end{equation}
 
+The TSDF is updated at an index $\mathbf{p}$ with,
+
+\begin{equation}
+\mathrm{F}_k(\mathbf{p}) = \frac{\mathrm{W}_{k-1}(\mathbf{p}) \mathrm{F}_{k-1}(\mathbf{p}) + \mathrm{W}_{\mathbf{R}_k}(\mathbf{p}) \mathrm{F}_{\mathbf{R}_k}(\mathbf{p})}{\mathrm{W}_{k-1}(\mathbf{p}) + \mathrm{W}_{\mathbf{R}_k}(\mathbf{p})}
+\end{equation}
+
+\begin{equation}
+\mathrm{W}_k (\mathbf{p}) \leftarrow \mathrm{min} (\mathrm{W}_{k-1} (\mathbf{p}) + \mathrm{W} (\mathbf{p}), \mathrm{W}_{\eta})
+\end{equation}
+
+this updates the TSDFs distance value $\mathrm{F}_k$ and weight value $\mathrm{W}_k$ at the point $\mathbf{p}$ which updates our global model of the environments depth values and weight values. The weight $\mathrm{W}_k$ provides weighting of the TSDF proportional to the uncertainty of the surface measurement. It has been found that setting $\mathrm{W}_{\mathrm{R}_k} (\mathbf{p}) = 1$ resulting in a simple average, provides good results. 
+
 \subsection{Surface Prediction from Ray Casting the TSDF}
 To estimate the change in pose, we must first create a vertex and normal map from the global TSDF by casting rays into the TSDF and finding zero crossings. This pointcloude that we predict is used to calculated the rigid body transform between the current camera pose and the global model.
 We can compute a dense surface prediction by rendering the surface in a virtual camera with the current estimate $\mathsf{T}_{g,k}$. 
@@ -141,6 +154,8 @@ For points on or close to surface interface $F_{k}(\mathbf{p}) = 0$ we assume th
     \frac{\delta F}{\delta x}, & \frac{\delta F}{\delta y}, & \frac{\delta F}{\delta z}
 \end{bmatrix}^{\top}
 \end{equation}
+
+This provides us with an approximated vertex and normal map which is used in the sensor pose estimation step as the comparison previous vertex and normal map.
 
 
 \subsection{Sensor Pose Estimation}
@@ -161,9 +176,7 @@ where $\mathbb{SE}_{3} := \{\mathsf{R}, \mathbf{t}\ |\ \mathsf{R} \in \mathbb{SO
 
 \hfill \break
 
-To track the sensor frame, the live surface measurement $(\mathbf{V}_{k}, \mathbf{N}_{k})$ against the model prediction from the previous frame $(\mathbf{\hat{V}}_{k-1}, \mathbf{\hat{N}}_{k-1})$
-
-First we must find correspondences between the two sets of points with projective data association. 
+To track the sensor frame, the live surface measurement $(\mathbf{V}_{k}, \mathbf{N}_{k})$ against the model prediction from the previous frame $(\mathbf{\hat{V}}_{k-1}, \mathbf{\hat{N}}_{k-1})$. First we must find correspondences between the two sets of points with projective data association. 
 
 
 \begin{algorithm}
@@ -208,7 +221,7 @@ A linear approximation is used to solve this system, we assume that the transfor
 \end{figure}
 
 \subsection{Bringing it All Together}
-Now that we have seen how each system works separately it helps to see how each piece works together to make this system work as well as it does. Figure \ref{fig:workflow} shows how each output from each calculation we have made is used in the system. To summarize, the input image $\mathsf{R}_k$ is passed to the surface measurement component and the component that updates our current reconstruction. From the measurement we pass our surface vertex and normal maps $\mathbf{V}_k$ and $\mathbf{N}_k$ to the pose estimation component, this also requires our predicted vertex and normal maps as well as the global pose as we must calculate the transform with respect to our model. The pose we calculated is sent to the reconstruction updating component where the frame $\mathsf{R}_k$ is integrated into our Global TSDF, in the prediction phase we raycast our current TSDF to come up with our predicted vertex and normal maps. This process is fast enough for this system to run at 30 frames per second. 
+Now that we have seen how each system works separately it helps to see how each piece works together to make this system work as well as it does. Figure \ref{fig:workflow} shows how each output from each calculation we have made is used in the system. To summarize, the input image $\mathsf{R}_k$ is passed to the surface measurement component and the component that updates our current reconstruction. From the measurement we pass our surface vertex and normal maps $\mathbf{V}_k$ and $\mathbf{N}_k$ to the pose estimation component, this also requires our predicted vertex and normal maps as well as the global pose as we must calculate the transform with respect to our model. The pose we calculated is sent to the reconstruction updating component where the frame $\mathsf{R}_k$ is integrated into our Global TSDF, in the prediction phase we raycast our current TSDF to come up with our predicted vertex and normal maps. This process is fast enough for this system to run at 30 frames per second. Figure \ref{fig:visworkflow} shows a more visual overview of the system.
 
 \begin{figure}
   \centering
@@ -221,6 +234,7 @@ Now that we have seen how each system works separately it helps to see how each 
   \centering
   \includegraphics[width=1.0\linewidth]{kinectfusion}
   \caption{Overview of the KinectFusion system.}
+  \label{fig:visworkflow}
 \end{figure}
 
 
@@ -294,7 +308,10 @@ A perspective projection of a 3D point $\mathbf{v} = (x,y,z)^{\top}$ is defined,
   \| I_{n}(\mathbf{p} - I_{n-1}(\Pi_{n-1}(exp(\xi)\mathbf{T}V_{n}(\mathbf{p})))  \|^{2}
 \end{equation}
 
-where $\mathcal{L}$ is the list of valid interest points populated by the following alogrithm and $\mathbf{T}$ is the current estimate of the transform.
+where $\mathcal{L}$ is the list of valid interest points are populated by algorithm 2 on the last page, and $\mathbf{T}$ is the current estimate of the transform. Algorithm 2 shows how the interest point correspondences are accumulated.
+
+
+
 
 \subsection{Combined Camera Pose Estimation}
 Now that we have two estimates of the pose we create a combined estimate by weighting the RGBD estimate against the ICP estimate. This will improve our overall estimate of pose and make the global model more accurate overall
@@ -365,4 +382,9 @@ This is a standalone fork of KinFu and provides the extended volume features pre
 
 \bibliographystyle{abbrv}
 \bibliography{reconstruction}
+
+
+\includegraphics[width=1.0\linewidth]{algorithm2}
+\includegraphics[width=1.0\linewidth]{algorithm3}
+
 \end{document}
