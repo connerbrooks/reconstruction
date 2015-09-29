@@ -12,17 +12,17 @@
 
 \begin{document}
 
-\title{Advanced Real-time Reconstruction Methods}
+\title{Real-time 3D Reconstruction at Scale Using VoxelHashing}
 
 \author{Conner Brooks\\
 \\
-CAP 4453\\
+COT 4810\\
 \today \\
 \\
 University of Central Florida\\
 Orlando, FL, USA\\
 \\
-connerbrooks@gmail.com\\
+cbrooks@cs.ucf.edu\\
 }
 
 \maketitle
@@ -30,31 +30,59 @@ connerbrooks@gmail.com\\
 
 
 \begin{abstract}
-The paper Real Time Dense RGB-D SLAM with Volumentric Fusion \cite{whelan14} presents a new SLAM--Simultaneous Localization and Mapping--system capable of producing high quality
-reconstructions of a 3 dimensional environment with a low cost RGB-D sensor e.g. the Microsoft Kinect. This system is made possible by three key techniques.
-First, General-Purpose computing on Graphics Processing Units (GPGPU) and a 3D 
-  cyclical buffer trick to extend the scanning volume to and unbounded spatial
-  region. Second, this system also overcomes pose estimation limitations by combining
-  dense geometric and photometric camera pose constraints. Third, the map of the 
-  environment is updated according to place recognition and loop closure constraints.
-  In this paper the initial implementation of KinectFusion \cite{izadi11} \cite{newcombe11} will be described, as well as the first 2 contributions from the paper by Whelan et al.
+The paper Real-time 3D Reconstruction at Scale using Voxel Hashing
+\cite{niessner2013hashing} presents a new SLAM---Simultaneous Localization and
+Mapping---system capable of producing high quality
+reconstructions of a 3 dimensional environment with a low cost RGB-D sensor e.g.
+the Microsoft Kinect. 
+The novel contribution of this paper is a spatial hashing scheme that compresses space, allows for real-time access, and updates of surface data, all without the need for a regular or hierarchical grid data structure.
+In this paper the initial implementation of KinectFusion \cite{izadi11}
+\cite{newcombe11} will be described, as well as the spatial hashing approach
+outlined in the paper by Nie{\ss}ner et al.
   
 \end{abstract}
 
 
 
 \section{Introduction}
-3D reconstruction of environments is an important problem for robotics, virtual reality, and augmented reality. Understanding the geometry allows a robot to avoid obticals and navigate, and with augmented reality allows for interesting interactions with the environment. The advent of commodity depth sensors has resulted in a large amount of research concerning 3D understanding of environments. The work by Whelan et al. is the culmination of much of that work and represents one of the most advanced 3D scanning systems. To understand the work presented in this paper, one must first understand the work in the seminal paper by Newcombe et al. \cite{newcombe11}.
-The purpose of these systems and their development are to provide a dense 3D mesh of the physical environment some agent--a robot or human--may be positioned in. These systems allow for full 6 degrees of freedom (6DOF) tracking of where in the environment the agent is and where it is looking--that is the agent's translation $(x, y, z)$ cartesian coordinates in space (with respect to some origin, normally where the scan begins) and rotation or where the agent is pointed. 
-This is similar to previous SLAM systems, however the difference is that the map created by this system is a dense mesh which is useful especially in augmented reality applications where we want to know where a surface is in order to place a virtual object or display an interface with respect to the environment. 
-The difficulty with these application is normally the tracking as it is slow and not robust enough for a common user to make efficient use of the system; KinectFusion and the extensions presented by Whelan et. al. provide a system that improves tracking to a robust enough level that a common user can scan and move through the environment. This technology has been leveraged in the new Microsoft HoloLens \cite{hololens} which is a new head mounted augmented reality system that uses many of the concepts that will be explained in this paper. 
-The open-source community has made some contributions with respect to this field, providing a few different implementations of the initial KinectFusion algorithm as well as some of the extensions presented in this paper. A general overview of these implementations will be provided in section \ref{sec:opensource}. These implementations provide a good starting point for someone who may want to implement some of the extensions described in this paper. Unfortunately the source code for the implementation in the paper by Whelan et. al. was not provided.
+3D reconstruction of environments is an important problem for robotics, virtual
+reality, and augmented reality. Understanding the geometry allows a robot to
+avoid obticals and navigate, and with augmented reality allows for interesting
+interactions with the environment. The advent of commodity depth sensors has
+resulted in a large amount of research concerning 3D understanding of
+environments. This technology has been leveraged in the new Microsoft HoloLens \cite{hololens} which is a new head mounted augmented reality system.
 
+The purpose of these systems and their development are to provide a dense 3D
+mesh of the physical environment some agent---a robot or human---may be
+positioned in. 
+These systems allow for full 6 degrees of freedom (6DOF) tracking of where the agent is, and where it is looking, in the environment---that is the agent's translation $(x, y, z)$ cartesian coordinates in space (with respect to some origin, normally where the scan begins) and rotation or where the agent is pointed. 
+This is similar to previous SLAM systems, however the difference is that the map created by this system is a dense mesh which is useful especially in augmented reality applications where we want to know where a surface is in order to place a virtual object or display an interface with respect to the environment. 
+The difficulty with these application is normally tracking the pose of the user,
+as it is slow and not robust enough for a common user to make efficient use of
+the system; The extensions presented by Nie{\ss}ner et. al. provide a system
+that improves the system to be robust enough such that a common user can scan
+and move through the environment. 
+
+The work by Nie{\ss}ner et al. can be seen as the state of the art
+for large scale 3D reconstruction. To understand the work presented in this
+paper, one must first understand the work in the seminal paper by Newcombe et
+al. \cite{newcombe11}. This paper will begin with the basics of the KinectFusion
+sytem an subsequently explain the novel approach taken by Nie{\ss}ner et al. \cite{niessner2013hashing}.
+
+The open-source community has made some contributions to this
+field, providing a few different implementations of the initial KinectFusion
+algorithm as well as some of the extensions presented in this paper. A general
+overview of these implementations will be provided in section
+\ref{sec:opensource}. These implementations provide a good starting point for
+someone who may want to extend upon the work presented here. The source code for
+the implementation presented in this paper is available on github \cite{voxelhashing}.
 
 \section{KinectFusion Overview}
+The following is an overview of the KinectFusion system presented by Newcombe et
+al. \cite{newcombe11} and Izadi et al. \cite{izadi11}.
 
 \subsection{Understanding Depth Sensors}
-This system takes as input multiple 2D depth images--also known as depth maps--and fuses them into a mesh. These depth maps are like normal 2D images but rather than each pixel storing a red, green, and blue value they store a single depth value, this depth image can be thought of as a 2D array or matrix of depth values. An example of this is shown in figure \ref{fig:depthimage}. 
+This system takes as input multiple 2D depth images---also known as depth maps---and fuses them into a mesh. These depth maps are like normal 2D images but rather than each pixel storing a red, green, and blue value they store a single depth value, this depth image can be thought of as a 2D array or matrix of depth values. An example of this is shown in figure \ref{fig:depthimage}. 
 
 \begin{figure}[h!]
   \centering
@@ -63,7 +91,12 @@ This system takes as input multiple 2D depth images--also known as depth maps--a
   \label{fig:depthimage}
 \end{figure}
 
-The Kinect version 1 uses a PrimeSense sensor which uses structured-light to interpret depth, this works by projecting infrared points (IR) at the scene and using an IR camera to interpret those points. The projected IR points have a calibrated pattern which is picked up by the IR camera which is shown in figure \ref{fig:ir}. All processing to determine depth from this IR image is done on the device. 
+The Kinect version 1 uses a PrimeSense sensor which uses structured-light to
+interpret depth, this works by projecting infrared points (IR) at the scene and
+using an IR camera to interpret those points. The projected IR points have a
+calibrated pattern which is picked up by the IR camera which is shown in figure
+\ref{fig:ir}. All processing to determine depth from this IR image is done on
+the sensor itself. 
 
 \begin{figure}[h!]
   \centering
@@ -85,7 +118,7 @@ What we do in this step is that we take our depth image as described above and c
 
 
 
-At time $k$ raw depth map $R_k$--from the sensor--provides calibrated depth measurement $R_k(\mathbf{u}) \in \mathbb{R}$ at each image pixel $\mathbf{u} = (u,v)^{\top}$
+At time $k$ raw depth map $R_k$---from the sensor---provides calibrated depth measurement $R_k(\mathbf{u}) \in \mathbb{R}$ at each image pixel $\mathbf{u} = (u,v)^{\top}$
 A bilateral filter is applied $D_k(\mathbf{u})$ which will reduce noise in our depth image.
 Filtered depth values are back projected into sensor frame of reference to obtain vertex map $\mathbf{V}_k$ where 
 
@@ -93,7 +126,7 @@ Filtered depth values are back projected into sensor frame of reference to obtai
 \mathbf{V}_k(\mathbf{u}) = D_k(\mathbf{u})\mathbf{K}^{-1}\dot{\mathbf{u}}
 \end{equation}
 
-where $\mathbf{K}$ is the constant calibration matrix and transforms points $\rightarrow$ image pixels, and the dot denotes homogeneous vectors $\mathbf{\dot{u}} := (\mathbf{u}^{\top}|1)^{\top}$
+where $\mathbf{K}$ is the constant calibration matrix inherent to the sensor and transforms points $\rightarrow$ image pixels, and the dot denotes homogeneous vectors $\mathbf{\dot{u}} := (\mathbf{u}^{\top}|1)^{\top}$
 Since each frame is a measurment on a grid we can compute normal vectors with a cross product between neighboring map vertecies,
 
 \begin{equation}
@@ -102,16 +135,22 @@ Since each frame is a measurment on a grid we can compute normal vectors with a 
 
  where $v[\mathbf{x}] = \mathbf{x} / \| \mathbf{x} \|_{2}$
 
-We compute an $L = 3$ vertex and normal map pyramid is computed, the first level of the pyramid is the input depth map, we then down-sample this depth map to get the second level then once again to get the third level. 
+We compute an $L = 3$ vertex and normal map pyramid, the first level of the
+pyramid is the input depth map, we then down-sample this depth map to get the
+second level then downsample once again to get the third level. 
 Depth pyramid $D^{l \in[1\dots L]}$ bottom is original bilateral filtered depth map. 
 At each level $\textbf{V}^{l \in[1\dots L]}$ $\textbf{N}^{l \in[1\dots L]}$ with the equations from the previous slide.
 Given the camera $\rightarrow$ global co-ordinate frame transform $\mathsf{T}_{g,k}$, the global frame vertex is $\textbf{V}^{g}_{k} = \mathsf{T}_{g,k} \dot{\textbf{V}}_{k}(\mathrm{u})$
 The equivalent mapping of normal vectors $\mathbf{N}^{g}_{k}(\mathbf{u}) = \mathsf{R}_{g,k}\mathbf{N}(\mathbf{u})$
 This puts our vertex and normal maps into the global coordinate frame which is with respect to some $(0, 0, 0)$ (normally the location in which the scan was initiated).
 
-\subsection{Mapping as Surface Reconstruction}
-Each depth frame with its estimated pose, is fused into a single 3D reconstruction using a volumentric truncated signed distance function. You can think of this volume as a 3D grid that holds different values at each index. 
-This TSDF will be used to generate our mesh, we will also use the TSDF as a global reference for our new scans so that we can calculate the change in pose. 
+\subsection{Fusion} \label{sec:fusion}
+Each depth frame with its estimated pose, is fused into a single 3D
+reconstruction using a volumentric truncated signed distance function. You can
+think of this volume as a 3D grid that holds different values at each index. In
+KinectFusion this volume is fixed as it is bound by GPU memory. 
+
+The TSDF will be used to generate our mesh, we will also use the TSDF as a global reference for our new scans so that we can calculate the change in pose. 
 A signed distance functions value corresponds to the closest zero crossing (surface interface), taking positive values from surface $\rightarrow$ free space, and negative values on the non-visible side. Figure \ref{fig:tsdfslice} shows how the TSDF can represent surfaces as zero crossings.
 The TSDF is denoted by $\mathbf{S}_{k}(\mathbf{p})$ where $\mathbf{p} \in \mathbb{R}^{3}$ is a global frame point in the TSDF with a specified resolution. The continous TSDF will be denoted by $\mathbf{S}$
 
@@ -140,8 +179,9 @@ The TSDF is updated at an index $\mathbf{p}$ with,
 
 this updates the TSDFs distance value $\mathrm{F}_k$ and weight value $\mathrm{W}_k$ at the point $\mathbf{p}$ which updates our global model of the environments depth values and weight values. The weight $\mathrm{W}_k$ provides weighting of the TSDF proportional to the uncertainty of the surface measurement. It has been found that setting $\mathrm{W}_{\mathrm{R}_k} (\mathbf{p}) = 1$ resulting in a simple average, provides good results. 
 
-\subsection{Surface Prediction from Ray Casting the TSDF}
-To estimate the change in pose, we must first create a vertex and normal map from the global TSDF by casting rays into the TSDF and finding zero crossings. This pointcloude that we predict is used to calculated the rigid body transform between the current camera pose and the global model.
+\subsubsection{Surface Prediction from Ray Casting the TSDF} \label{sec:surface}
+To estimate the change in pose, we must first create a vertex and normal map from the global TSDF by casting rays into the TSDF and finding zero crossings. This pointcloud that we predict is used to calculated the rigid body transform between the current camera pose and the global model.
+
 We can compute a dense surface prediction by rendering the surface in a virtual camera with the current estimate $\mathsf{T}_{g,k}$. 
 The surface prediction is stored as a vertex and normal map $\hat{\mathbf{V}}_{k}$ and $\hat{\mathbf{N}}_{k}$ and frame of reference $k$.
 This is used in the subsequent camera pose estimation step.
@@ -158,7 +198,7 @@ For points on or close to surface interface $F_{k}(\mathbf{p}) = 0$ we assume th
 This provides us with an approximated vertex and normal map which is used in the sensor pose estimation step as the comparison previous vertex and normal map.
 
 
-\subsection{Sensor Pose Estimation}
+\subsubsection{Sensor Pose Estimation} \label{sec:pose}
 Now that we have our vertex and normal map from our current frame and the global model we can estimated the change in pose for this frame. This will allow our new frame to be fused into the TSDF at the correct location.
 
 The live 6DOF camera pose estimated for a frame at time k that is the rotation $\mathsf{R}_{g,k}$ and translation $\mathbf{t}_{g,k}$
@@ -220,8 +260,23 @@ A linear approximation is used to solve this system, we assume that the transfor
   \label{fig:pointplane}
 \end{figure}
 
-\subsection{Bringing it All Together}
-Now that we have seen how each system works separately it helps to see how each piece works together to make this system work as well as it does. Figure \ref{fig:workflow} shows how each output from each calculation we have made is used in the system. To summarize, the input image $\mathsf{R}_k$ is passed to the surface measurement component and the component that updates our current reconstruction. From the measurement we pass our surface vertex and normal maps $\mathbf{V}_k$ and $\mathbf{N}_k$ to the pose estimation component, this also requires our predicted vertex and normal maps as well as the global pose as we must calculate the transform with respect to our model. The pose we calculated is sent to the reconstruction updating component where the frame $\mathsf{R}_k$ is integrated into our Global TSDF, in the prediction phase we raycast our current TSDF to come up with our predicted vertex and normal maps. This process is fast enough for this system to run at 30 frames per second. Figure \ref{fig:visworkflow} shows a more visual overview of the system.
+\subsubsection{System Overview}
+Now that we have seen how each system works separately it helps to see how each
+piece works together to make this system work as well as it does. Figure
+\ref{fig:workflow} shows how each output from each calculation we have made is
+used in the system. 
+
+To summarize, the input image $\mathsf{R}_k$ is passed to
+the surface measurement component and the component that updates our current
+reconstruction. From the measurement we pass our surface vertex and normal maps
+$\mathbf{V}_k$ and $\mathbf{N}_k$ to the pose estimation component, this
+requires our predicted vertex and normal maps as we
+must calculate the transform with respect to our model. The pose we calculated
+is sent to the reconstruction updating component where the frame $\mathsf{R}_k$
+is integrated into our Global TSDF, in the prediction phase we raycast our
+current TSDF to come up with our predicted vertex and normal maps. This process
+is fast enough for this system to run at 30 frames per second. Figure
+\ref{fig:visworkflow} shows a more visual overview of this system.
 
 \begin{figure}
   \centering
@@ -239,152 +294,343 @@ Now that we have seen how each system works separately it helps to see how each 
 
 
 
-\section{Extensions to Kinect Fusion}
-Now we move to the extension of this algorithm presented by Whelan et. al \cite{whelan14}. This section will cover the cyclical buffer trick used which allows unlimited volumes to be scanned as well as improved camera estimates using photometric pose estimation which improves overall model accuracy.
+\section{VoxelHashing}
+Now we will cover the novel aspects presented by Nie{\ss}ner et. al
+\cite{niessner2013hashing}. In this section the pipeline and novel data structure used for
+scanning and storing the scene will be explained. 
 
-\subsection{Cyclical Buffer Trick}
-The first contribution of this paper is a cyclical buffer trick that allows the maximum volume that we can scan to be infinitely large. In the initial KinectFusion implementation the volume was limited by how large GPU memory was as the TSDF must be stored in GPU memory in order for the application to run at 30 fps. This contribution allows the GPU memory to be reused and the scanned areas to be saved to computer memory extending the maximum volume.
+This data structure allows for the following main features: 
 
-The position of the TSDF volume in the global frame is initially $\mathbf{g}_{0} = (0, 0, 0)^{\top}$
-When our pose estimate leaves a movement threshold $m_{s}$ around $\mathbf{g}_{i}$ will cause a volume shift.
-The shift triggers and the TSDF is virtually translated about the camera pose (in voxel units) to bring the camera's position to $\mathbf{g}_{i+1}$.
-To compute the new camera pose, we must compute the number of voxel units crossed,
-
-\begin{equation}
-u = \lfloor \frac{v_{s}t^{T}_{i+1}}{v_d} \rfloor
-\end{equation}
-
-then shift the pose, updating the global position of the TSDF,
-
-\begin{equation}
-\mathbf{t}^{T'}_{i+1} = \mathbf{t}^{T}_{i+1} - \frac{v_{d}\mathbf{u}}{v_{s}}
-\end{equation}
-
-\begin{equation}
-\mathbf{g}_{i+1} = \mathbf{g}_{i} + \mathbf{u}
-\end{equation}
-
-\begin{figure}
-  \centering
-  \includegraphics[width=0.8\linewidth]{tsdfshift}
-  \caption{This shows the movement threshold $m_s$ and how the TSDF volume shifts when the camera moves outside of the bounds of this threshold.}
-  \label{fig:tsdfshift}
-\end{figure}
-
-This process is shown in figure \ref{fig:tsdfshift}.
+\begin{itemize}
+    \item Efficient compression of volumetric TSDFs, maintaining resolution.
+    \item Fusing new samples into the hash table
+    \item Removal and garbage collection of voxel blocks, without reorganizing
+        the data structure.
+    \item Easy streaming of voxel blocks between the host and GPU memory, for
+      large scale scans.
+    \item Extraction of isosurface (mesh) using standard raycasting
+        operations, for rendering and camera pose tracking.
+\end{itemize}
 
 
-This creates what is referred to as a cloud slice, this cloud slice is part of the whole TSDF. This cloud slice gets passed to a greedy triangulation algorithm to create the mesh, and is then stored in computer memory. This allows the volume we wish to scan to be as large as we wish, as the mesh stored in memory will be paged to disk. A visualization of this process is shown in figure \ref{fig:cloudslice}.
+\subsection{Pipeline}
+
+Central to the overall architecture of this paper is a hash table data structure
+that stores sub-blocks containing TSDFs, called voxel blocks. At each voxel a
+value, weight, and color are stored. The hash table itself is not organized
+spatially---neighboring voxel entries are not actually neigboring each other in space.
 
 \begin{figure}
   \centering
-  \includegraphics[width=1.0\linewidth]{cloudslice}
-  \caption{Visualization of the volume shifting process, (i) The camera motion exceeds the movement threshold ms (direction of camera motion shown by the black arrow); (ii) Volume slice leaving the volume (red) is raycast along all three axes to extract surface points and reset to free space; (iii) The raycast surface is extracted as a point cloud and fed into the Greedy Projection Triangulation (GPT) algorithm of Marton et al. (2009); (iv) New region of space (blue) enters the volume and is integrated using new modulo addressing of the volume.}
-  \label{fig:cloudslice}
+  \includegraphics[width=1.0\linewidth]{voxelhashingpipeline}
+  \caption{Voxel hashing pipeline.}
+  \label{fig:vhpipeline}
+\end{figure}
+
+
+The system starts by reading a new input from the depth camera, and fusion---also
+reffered to as integration---is performed. Voxel blocks in the view frustum are
+allocated based on the input depth map. Only occupied voxels are allocated, and
+empty space is ignored. The allocated voxel blocks are updated with the input
+depth map---color, weight and value are each updated. Voxel blocks too far from
+the scanned surface are garbage collected---removed from the hash table freeing
+the allocated memory. This ensures that the data structure remains sparse over
+time. After integration, the surface is raycasted from the current estimated
+camera pose. This extracted information is passed back to camera tracking to
+estimate the camera's 6DoF pose using Iterative Closest Points. The system also
+performs bidirectional streaming between GPU and host memory, which allows
+previously scanned voxel blocks to be streamed back to the GPU for further
+updates. The entire process is shown visually in figure \ref{fig:vhpipeline}.
+
+\subsection{Data Structure}
+Figure \ref{fig:hashtable} shows the voxel hashing data structure. One way to think
+about this data structure is that an infinite uniform grid subdivides the world
+into voxel blocks. Each block is a regular voxel grid. In this implementation
+the voxel block consists of $8^3$ voxels where each voxel stores a TSDF value, color
+and a weight. This structure is shown visually in figure \ref{fig:hashtable}.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{hashtable}
+  \caption{Visualization of the table.}
+  \label{fig:hashtable}
+\end{figure}
+
+%todo ? add voxel struct
+
+To exploit sparsity of environments---the fact that most environments are
+empty space---voxel blocks are only allocated around surface geometry. A GPU
+accelerated hash table is used to manage allocation and retrieval of voxel
+blocks. The hash table stores hash entries which have a pointer to a voxel block
+in GPU memory. These blocks can be retrieved using the world coordinates of the
+voxel block $(x,y,z)$; These coordinates are rounded. The world coordinate is
+mapped to a hash value $H(x,y,z)$ using the hash function below:
+\begin{equation}
+  H(x,y,z) = (x * p_1 \oplus y * p_2 \oplus z * p_3) \mod n
+\end{equation}
+Where $p_1$, $p_2$, and $p_3$ are large primes (in the case of this papere 73856093,
+19349669, 83492791 respectively based on Teschner et al.) and n is the hash
+table size. 
+
+% todo ? add hash entry struct
+
+\subsubsection{Resolving Collisiions}
+Collisions in the hash table will occur when different allocated blocks map to
+the same hash value. These collisions are handled by creating buckets in the
+hash table that map to one unique hash value. Each bucket stores a number of
+hash entries. When there is a collision the current hash entry is stored in the
+next available entry in the bucket. If the bucket is full---which will rarely
+happen with a reasonable table and bucket size---a linked list entry is appended
+filling spots in the subsequent buckets. These linked list entries are stored in
+the offset pointer in the hash entry. In general the last entry in a bucket will
+be the head of the linked list.
+
+\subsubsection{Hashing Operations}
+
+\noindent
+\textbf{Insertion} to insert a hash entry, the hash function is evaluated which
+maps to a bucket. We linearly search through the bucket to find an empty space
+and if needed the linked list to find a position to store the new entry. To
+avoid race conditions the bucket is locked during insertion. 
+
+\noindent
+\textbf{Retrieval} To read a value from the hash table the hash function is
+evaluated and perform a linear search through the bucket and the attached linked
+list if it exists. The search does not stop at empty entries as removing values
+can leave the bucket fragmented.
+
+\noindent
+\textbf{Removal} The hash function is evaluated for a given world coordinate and
+linearly search the corresponding bucket, traversing the linked list if needed.
+If we find a match to the given entry without traversing the list we can just
+delete the entry. However if the list was traversed we must ensure that we
+update the linked list. If the hash entry we wish to delete is a linked list
+head---it is the last element in the bucket---then the hash entry pointed to by
+that offset is copied into the last element of the bucket. Otherwise the element
+is not the head and can be removed, updating the linked list pointers. If the
+linked list is updated we must lock the bucket atomically.
+
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{hashtableoperations}
+  \caption{Hash table operations showing insertion and removal of values that
+    all map to a hash value of 1.}
+  \label{fig:hashingoperations}
+\end{figure}
+
+
+\subsection{Voxel Block Allocation}
+Prior to integration of new TSDFs, corresponding voxel blocks that are within
+the bounds of the depth sample must be allocated in the hash table. 
+
+For each input depth sample a ray is created with an interval bound to the
+truncation region of the observed surface. For each candidate found, a new voxel
+entry is added to the hash table. This ray based approach provides much better
+performance than modeling the entire view frustum and provides sufficient
+coverage of the scene to be scanned.
+
+Once the blocks have been inserted, GPU memory is allocated for the voxel block
+data. The memory on the GPU is divided into blocks. The blocks are managed by a
+list of available blocks, which is a linear buffer with indices pointing to
+unallocated blocks. This list must be updated atomically and is updated on
+insertion and removal. The last index in the list is used for a new block allocation.
+
+\subsection{Voxel Block Integration}
+
+Integration (fusion) is very similar to the previous implementation from Kinect Fusion
+mentioned in \ref{sec:fusion}. The important difference is how the voxel blocks
+are selected.
+
+\noindent
+\textbf{Voxel Block Selection} Voxel blocks are selected for integration by
+first, in parallel, accessing all the hash table entries storing a binary flag.
+1 for occupied visible blocks and 0 otherwise. This array is scanned with a
+parallel prefix sum \cite{harris2007parallel}. The hash table can be arbitrarily
+large so a three level up and down sweep is used. Using these results a compact
+hash table is created in a different buffer, containing all blocks within the
+view frustum (see \ref{fig:selection}).
+
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{viewfrustumselection}
+  \caption{Voxel block selection for updates.}
+  \label{fig:selection}
+\end{figure}
+
+\noindent
+\textbf{Surface Update} The list of hash entries that were generated is
+processed in parallel to update the TSDF values. One GPGPU kernel is executed
+for each block, and one thread is allocated per voxel.
+
+Updating the voxel blocks requires computing the associated TSDFs, both weights
+and colors. Depth values are integrated using a a running averages as in Curless
+and Levoy \cite{curless1996}. 
+
+The weights are set according to the depth values, this allows the the noise of
+the sensor to be incorperated. Near values are given a higher weight than those
+further away as those closer are assumed to be less noisy. 
+
+
+\subsection{Surface Extraction}
+
+Surface extraction is performed in the same way as described in section \ref{sec:surface}.
+
+\noindent
+\textbf{Camera Tracking} After we have extracted the surface via raycasting, it
+can be shaded and displayed to the users, and used for frame-to-model camera
+pose estimation \cite{newcombe11}. The next input frame from the depth camera is
+used with the raycasted depth map to estimate pose, this is exactly the same as
+the process detailed in section \ref{sec:pose}.
+
+
+\subsection{Streaming}
+To allow for unbounded reconstructions a bidirectional GPU-Host memory streaming
+scheme is used. 
+
+This unstructured data structure makes this process trivial as there is no
+reorganization required as in the heirarchical approach. An active region is
+defined as a sphere containing the view frustum and some padding around it. This
+streaming occures at every frame just after camera pose estimation. This is
+shown in figure \ref{fig:streaming}.
+
+\subsubsection{GPU-to-Host}
+Streaming from the GPU to the host requires looking through the hash table and
+marking voxel blocks which will be outside of the active region. These voxel
+blocks are deleted from the data structure on the GPU and added to an
+intermediate buffer. 
+
+In host memory the data is no longer stored in a hash table, rather the world
+space is divided into chunks (in their implementation $1m^3$). Voxel blocks are
+added to these chunks and a descriptor for hash entry information is added to
+each voxel block.
+
+\subsubsection{Host-to-GPU}
+To move from host to GPU chunks that fall entirely into the active region must
+be identified. Host-to-GPU streaming is executed on a per chunk basis rather
+than per voxel as with GPU-to-Host. 
+
+For performance, streaming host-to-GPU is limited to one chunk per frame. Once
+selected, the chunk is streamed to the intermediate buffer created for
+GPU-to-Host streaming. The voxel blocks now in the intermediate buffer are
+reinserted into the hash table using the voxel block descriptors. Reallocating
+memory on the heap for these voxel blocks and copying them to their respective
+locations. 
+
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{streaming}
+  \caption{Camera moving from left to right. Voxel blocks leaving the camera
+    frustum are streamed out (green). Streaming in happens in chucks (red blocks).}
+  \label{fig:streaming}
 \end{figure}
 
 
 
-\subsection{Photometric Camera Pose Estimation}
-The second major contribution of this paper is its combination of photometric and geometric pose estimation. Rather than relying solely on iterative closest points it adds a second estimate that uses the RGB data from the Kinect. This provides a more accurate estimate of the pose so that when we fuse a new depth image its points are more accurate with respect to the entire model.
+\subsection{Results}
+Comparisons of voxel hashing to other similar systems are shown in 
+figure \ref{fig:comparetracking}. Comparisons with other moving volume approaches were
+conducted. First a comparison with Extended Fusion \cite{Whelan14} \cite{roth2012moving} which uses a
+uniform regular grid that moves through the environment streaming data out as an
+optimized mesh. Second, a comparison to Heirarchical Fusion
+\cite{chen2013scalable} which supports larger moving volumes.
 
-Given two consecutive RGB-D frames $[\mathbf{rgb}_{n-1}, \mathbf{d}_{n-1}]$ and $[\mathbf{rgb}_{n}, \mathbf{d}_{n}]$
-A rigid transform is computed between the two that maximizes photo-consistency. 
-We define $V: \Omega \rightarrow \mathbb{R}^{3}$ to be back-projection of point $\mathbf{p}$ dependent on
-a metric depth map $M: \Omega \rightarrow \mathbb{R}$ and
-a camera intrinsics matrix $\mathbf{K} \rightarrow$ principle points $c_{x}, c_{y}$ and focal lengths $f_{x}, f_{y}$ 
-
-\begin{equation}
-V(\mathbf{p}) = \left( \frac{(\mathbf{p}_{x} - c_{x})M(\mathbf{p})}{f_{x}}, \frac{(\mathbf{p}_{y} - c_{y})M(\mathbf{p})}{f_{y}}, M(\mathbf{p}) \right)^{\top}
-\end{equation}
-
-A perspective projection of a 3D point $\mathbf{v} = (x,y,z)^{\top}$ is defined, as well as a dehomogenization by $\Pi(\mathbf{v}) = (x/z, y/z)^{\top}$. The cost to be minimised depends on the difference in intensity values between the two images $I_{n-1}, I{n}: \Omega \rightarrow \mathbb{N}$
-
-\begin{equation}
-\mathbf{E}_{rgbd} = 
-\sum_{\substack{
-   \mathbf{p} \in \mathcal{L} 
-  }}
-  \| I_{n}(\mathbf{p} - I_{n-1}(\Pi_{n-1}(exp(\xi)\mathbf{T}V_{n}(\mathbf{p})))  \|^{2}
-\end{equation}
-
-where $\mathcal{L}$ is the list of valid interest points are populated by algorithm 2 on the last page, and $\mathbf{T}$ is the current estimate of the transform. Algorithm 2 shows how the interest point correspondences are accumulated.
+Shown in figure \ref{fig:compare}, the quality and scale of the reconstruction
+with the voxel hashing approach is greater than other approaches. Figure
+\ref{fig:framerate} shows a comparison of the framerates of the different systems.
 
 
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{comparison}
+  \caption{Quality and scale comparison between similar systems. Bottom right:
+    Voxel hashing at 4mm voxel size. Top: Moving volumes (top right) at the same
+    resolution, (top left) reduced resolution for equivalent scale. Bottom Left:
+    hierarchical grids approach.}
+  \label{fig:compare}
+\end{figure}
+
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{compare}
+  \caption{Comparison of the tracking drift. In grey is the hierarchical
+    approach of Chen et al. \cite{chen2013scalable} and in yellow is the results
+  from this paper.}
+  \label{fig:comparetracking}
+\end{figure}
 
 
-\subsection{Combined Camera Pose Estimation}
-Now that we have two estimates of the pose we create a combined estimate by weighting the RGBD estimate against the ICP estimate. This will improve our overall estimate of pose and make the global model more accurate overall
-
-
-\begin{equation}
-E = E_{icp} + w_{rgbd}E_{rgbd}
-\end{equation}
-
-where $w_{rgbd}$ is the weight and was set empirically to 0.1 to refelect the difference in metrics used for ICP and RGBD costs.
-
-For each step a linear least-squares problem  is minimized by solving:
-% TODO least squares equation
-
-\begin{equation}
-\begin{bmatrix}
-       \mathbf{J}_{icp} \\[0.3em]
-       v \mathbf{J}_{rgbd} \\[0.3em]
-\end{bmatrix}^{\top}
-\begin{bmatrix}
-       \mathbf{J}_{icp} \\[0.3em]
-       v \mathbf{J}_{rgbd} \\[0.3em]
-\end{bmatrix}
-\xi
-=
-\begin{bmatrix}
-       \mathbf{J}_{icp} \\[0.3em]
-       v \mathbf{J}_{rgbd} \\[0.3em]
-\end{bmatrix}^{\top}
-\begin{bmatrix}
-       \mathbf{r}_{icp} \\[0.3em]
-       \mathbf{r}_{rgbd} \\[0.3em]
-\end{bmatrix}
-\end{equation}
-
-\begin{equation}
-(\mathbf{J}^{\top}_{icp} \mathbf{J}_{icp} + w_{rgbd} \mathbf{J}^{\top}_{rgbd} \mathbf{J}_{rgbd}) \xi = \mathbf{J}^{\top}_{icp} \mathbf{r}_{icp} + v \mathbf{J}^{\top}_{rgbd} \mathbf{r}_{rgbd}
-\end{equation}
-
-where $v = \sqrt{w_{rgbd}}$. The products $\mathbf{J}^{\top}\mathbf{J}$ and $\mathbf{J}^{\top} \mathbf{r}$ are computed on the GPU using a tree reduction. The final estimate returns a locally optimal camera pose which minimizes the photometric error between the RGB-D frame and the last and the geometric error between the current depth frame and the TSDF surface reconstruction.
+\begin{figure}
+  \centering
+  \includegraphics[width=1.0\linewidth]{results}
+  \caption{Framerate comparison between the different approaches.}
+  \label{fig:framerate}
+\end{figure}
 
 
 \section{Open Source Implementations} \label{sec:opensource}
-There are a few open source implementations of the KinectFusion system and its extensions. 
+There are a few open source implementations of the KinectFusion system and its
+extensions:
 \begin{enumerate}
   \item Microsoft KinectFusion \cite{MSKinectFusion}
   \item KFusion \cite{kfusion}
   \item KinFu from Point Cloud Library (PCL) \cite{kinfu}
   \item RXKinFu a fork of PCL KinFu from Northeastern University \cite{RXKinFu}
+  \item VoxelHashing source code (this paper) \cite{voxelhashing}
+  \item InfiniTAM a framework for Volumetric Fusion of depth images \cite{prisacariu2014}
 \end{enumerate}
 
-I have built an run each of these implementations except RXKinFu.  Many of these implementations have issues with tracking, there is generally no recovery so if you get into a bad state you will have to restart your scan. Many of them leave much to be desired, I began working on adding my extensions to these systems by extending KinFu Large Scale.
+ I have tested many of the different implementations of these systems. 
+Many of the moving volume implementations have issues with tracking as
+ described above. The implementations of Voxel Hashing however are much better
+ at tracking, scale, and speed.
 
-\subsection{Microsoft KinectFusion}
+\subsection{KinectFusion Implementations}
+\subsubsection{Microsoft KinectFusion}
 This implementation has partial code availability it comes with the new Kinect SDK, it is limited to a fixed volume. It is not fully open-source as some of the headers access closed source libraries that implement many of the important functions that comprise the system. 
 
-\subsection{KFusion}
-KFusion is an implementation of the initial KinectFusion algorithm based on the paper by Newcombe et. al. It is a standalone application with a very simple structure that is helpful to understand each individual part of the system.
+\subsubsection{KFusion}
+KFusion is an implementation of the initial KinectFusion algorithm based on the
+paper by Newcombe et al. \cite{newcombe11} and Izadi et al. \cite{izadi11}. It is a standalone application with a very simple structure that is helpful to understand each individual part of the system.
 
-\subsection{KinFu}
-KinFu is a fully open source implementation from the Point Cloud Library team, there are 2 implementations available a fixed volume version KinFu and a large scale version KinFu Large Scale which uses the cyclical buffer trick presented in this paper to extend its volume. The main issue with this implementation is that it is not standalone it requires you to compile almost all of the point cloud library which, depending on your environment may take a considerable amount of time.
+\subsubsection{KinFu}
+KinFu is a fully open source implementation from the Point Cloud Library team,
+there are 2 implementations available a fixed volume version KinFu and a large
+scale version KinFu Large Scale which uses moving volumes to extend its volume.
 
-\subsection{RXKinFu}
-This is a standalone fork of KinFu and provides the extended volume features presented in this paper. As well as some other enhancements to the overall system.
+\subsubsection{RXKinFu}
+This is a standalone fork of KinFu and provides the extended volume features
+presented by Roth et al. \cite{roth2012moving}. 
+
+\subsection{VoxelHashing Implementations}
+\subsubsection{VoxelHashing}
+Implementation of the system presented in this paper \cite{niessner2013hashing}.
+
+\subsubsection{InfiniTAM}
+This implementation provides multiple different approaches for volumetric fusion
+based on your application. It includes implementations of both the original
+KinectFusion implementation \cite{newcombe11} \cite{izadi11} and VoxelHashing \cite{niessner2013hashing}.
 
 
-
+\section{Reflections on My Presentation}
+My presentation was a bit rushed as this paper requires and understanding of
+much of the previous work and a lot of content needed to be covered in a short
+time. 
+I really need to learn to slow down when I am presenting and allow different ideas to
+sink in for the audience. Conceptualy the paper seemed to be understood---at
+least what it was trying to achieve---as the questions I recieved were
+applicability regaurding different situations. This is a fairly complex paper that
+requires knowledge of GPGPU computing, general graphics, data structures, and
+some involved algorithms; however I think that exposing people to these sorts of
+high performance computing and parallel ideas is important as applications get
+faster and more complex. I think think the presentation was at an adequate level
+but for the time alloted it may have been a bit more than I was able to explain
+effectively. 
 
 \bibliographystyle{abbrv}
 \bibliography{reconstruction}
 
 
-\includegraphics[width=1.0\linewidth]{algorithm2}
-\includegraphics[width=1.0\linewidth]{algorithm3}
+%\includegraphics[width=1.0\linewidth]{algorithm2}
+%\includegraphics[width=1.0\linewidth]{algorithm3}
 
 \end{document}
